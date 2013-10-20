@@ -2,18 +2,19 @@
 
 Decode Rails 4 encrypted cookies in Go.
 
-## Usage
+## Example
 
 ```go
+var json map[string]interface{}
 rookie := rookie.New(os.Getenv("SECRET_KEY_BASE"))
-rookie.Iterations = 500
-rookie.CookieSalt = []byte("cookie salt")
-rookie.CookieSaltLength = 32
-data, _ := rookie.Decode(cookie)
-data.Get("user_id")
+raw, _ := rookie.Decode(cookie)
+json.Unmarshal(raw, &json)
 ```
 
-`rookie.New` initialize the above values with Rails defaults.
+You have to monkey patch Ruby on Rails' cookie based session store to use JSON
+as its serializer instead of Marshal.
+
+See [gist.github.com/jeffyip/4091166](https://gist.github.com/jeffyip/4091166)
 
 ## License
 

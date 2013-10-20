@@ -25,25 +25,26 @@ func New(secretKeyBase string) *rookie {
 	}
 }
 
-func (r *rookie) generateKey() []byte {
-	return pbkdf2.Key(r.SecretKeyBase, r.CookieSalt, r.Iterations, r.CookieSaltLength, sha1.New)
+func (r *rookie) key() []byte {
+	return pbkdf2.Key(r.SecretKeyBase, r.CookieSalt, r.Iterations,
+		r.CookieSaltLength, sha1.New)
 }
 
 func (r *rookie) Decode(cookie string) ([]byte, error) {
-	secret := r.generateKey()
-
-	raw, _ := base64.StdEncoding.DecodeString(cookie)
+	raw, err := base64.StdEncoding.DecodeString(cookie)
 	parts := strings.Split(string(raw), "--")
-	data, _ := base64.StdEncoding.DecodeString(parts[0])
-	iv, _ := base64.StdEncoding.DecodeString(parts[1])
+	data, err := base64.StdEncoding.DecodeString(parts[0])
+	iv, err := base64.StdEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil, err
+	}
 
-	block, err := aes.NewCipher(secret[:32])
+	block, err := aes.NewCipher(r.key()[:32])
 	if err != nil {
 		return nil, err
 	}
 
 	mode := cipher.NewCBCDecrypter(block, iv)
 	mode.CryptBlocks(data, data)
-
 	return data, nil
 }
