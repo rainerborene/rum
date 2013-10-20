@@ -26,8 +26,7 @@ func New(secretKeyBase string) *rookie {
 }
 
 func (r *rookie) generateKey() []byte {
-	return pbkdf2.Key(r.SecretKeyBase, []byte(r.CookieSalt), r.Iterations,
-		r.CookieSaltLength, sha1.New)
+	return pbkdf2.Key(r.SecretKeyBase, r.CookieSalt, r.Iterations, r.CookieSaltLength, sha1.New)
 }
 
 func (r *rookie) Decode(cookie string) ([]byte, error) {
