@@ -30,7 +30,7 @@ func (r *rookie) key() []byte {
 		r.CookieSaltLength, sha1.New)
 }
 
-func (r *rookie) Decode(cookie string) ([]byte, error) {
+func (r *rookie) Decode(cookie string) (interface{}, error) {
 	raw, err := base64.StdEncoding.DecodeString(cookie)
 	parts := strings.Split(string(raw), "--")
 	data, err := base64.StdEncoding.DecodeString(parts[0])
@@ -46,5 +46,11 @@ func (r *rookie) Decode(cookie string) ([]byte, error) {
 
 	mode := cipher.NewCBCDecrypter(block, iv)
 	mode.CryptBlocks(data, data)
-	return data, nil
+
+	rubyObj, err := Unmarshal(data)
+	if err != nil {
+		return nil, err
+	}
+
+	return rubyObj, nil
 }
