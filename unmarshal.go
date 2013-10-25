@@ -8,9 +8,13 @@ import (
 
 var encodingSymbols = []byte{0x06, 'E', 'T'}
 
-func unmarshalRubyInteger(inputStream *bufio.Reader) int {
+type decoder struct {
+	r *bufio.Reader
+}
+
+func (d *decoder) unmarshalRubyInteger() int {
 	var result int
-	value, _ := inputStream.ReadByte()
+	value, _ := d.r.ReadByte()
 	c := int(value)
 
 	if c == 0 {
@@ -24,14 +28,14 @@ func unmarshalRubyInteger(inputStream *bufio.Reader) int {
 	if c > 0 {
 		result = 0
 		for i := 0; i < c; i++ {
-			n, _ := inputStream.ReadByte()
+			n, _ := d.r.ReadByte()
 			result |= int(uint(n) << (8 * uint(i)))
 		}
 	} else {
 		c = -c
 		result = -1
 		for i := 0; i < c; i++ {
-			n, _ := inputStream.ReadByte()
+			n, _ := d.r.ReadByte()
 			result &= ^(0xff << (8 * uint(i)))
 			result |= int(uint(n) << (8 * uint(i)))
 		}
@@ -40,74 +44,74 @@ func unmarshalRubyInteger(inputStream *bufio.Reader) int {
 	return result
 }
 
-func unmarshalRubyString(inputStream *bufio.Reader) string {
+func (d *decoder) unmarshalRubyString() string {
 	var value []byte
-	length := int(unmarshalRubyInteger(inputStream))
+	length := int(d.unmarshalRubyInteger())
 
 	for ; length > 0; length-- {
-		char, _ := inputStream.ReadByte()
+		char, _ := d.r.ReadByte()
 		value = append(value, char)
 	}
 
 	return string(value)
 }
 
-func unmarshalRubyHash(inputStream *bufio.Reader) interface{} {
-	size := unmarshalRubyInteger(inputStream)
+func (d *decoder) unmarshalRubyHash() interface{} {
+	size := d.unmarshalRubyInteger()
 	hash := make(map[string]interface{}, int(size))
 
 	for i := 0; i < int(size); i++ {
-		key := unmarshalRubyType(inputStream)
-		value := unmarshalRubyType(inputStream)
+		key := d.unmarshalRubyType()
+		value := d.unmarshalRubyType()
 		hash[key.(string)] = value
 	}
 
 	return hash
 }
 
-func unmarshalRubyArray(inputStream *bufio.Reader) []interface{} {
-	size := unmarshalRubyInteger(inputStream)
+func (d *decoder) unmarshalRubyArray() []interface{} {
+	size := d.unmarshalRubyInteger()
 	items := make([]interface{}, int(size))
 
 	for i := 0; i < int(size); i++ {
-		items[i] = unmarshalRubyType(inputStream)
+		items[i] = d.unmarshalRubyType()
 	}
 
 	return items
 }
 
-func unmarshalRubyType(inputStream *bufio.Reader) interface{} {
-	rubyType, _ := inputStream.ReadByte()
+func (d *decoder) unmarshalRubyType() interface{} {
+	rubyType, _ := d.r.ReadByte()
 
 	switch rubyType {
 	case 'I', 'T', 'F', ';', 0x00, 0x06:
-		return unmarshalRubyType(inputStream)
+		return d.unmarshalRubyType()
 	case '[':
-		return unmarshalRubyArray(inputStream)
+		return d.unmarshalRubyArray()
 	case '{':
-		return unmarshalRubyHash(inputStream)
+		return d.unmarshalRubyHash()
 	case '"':
-		return unmarshalRubyString(inputStream)
+		return d.unmarshalRubyString()
 	case 'i':
-		return unmarshalRubyInteger(inputStream)
+		return d.unmarshalRubyInteger()
 	case ':':
-		encoding, _ := inputStream.Peek(3)
+		encoding, _ := d.r.Peek(3)
 		if bytes.Equal(encoding, encodingSymbols) {
-			inputStream.ReadByte()
-			inputStream.ReadByte()
-			inputStream.ReadByte()
-			return unmarshalRubyType(inputStream)
+			d.r.ReadByte()
+			d.r.ReadByte()
+			d.r.ReadByte()
+			return d.unmarshalRubyType()
 		}
-		return unmarshalRubyString(inputStream)
+		return d.unmarshalRubyString()
 	}
 
 	return nil
 }
 
 func Unmarshal(buf []byte) (interface{}, error) {
-	inputStream := bufio.NewReader(bytes.NewReader(buf))
-	major, err := inputStream.ReadByte()
-	minor, err := inputStream.ReadByte()
+	decoder := &decoder{bufio.NewReader(bytes.NewReader(buf))}
+	major, err := decoder.r.ReadByte()
+	minor, err := decoder.r.ReadByte()
 
 	if err != nil {
 		return nil, errors.New("unexpected end of stream")
@@ -117,5 +121,5 @@ func Unmarshal(buf []byte) (interface{}, error) {
 		return nil, errors.New("incompatible marshal file format")
 	}
 
-	return unmarshalRubyType(inputStream), nil
+	return decoder.unmarshalRubyType(), nil
 }
