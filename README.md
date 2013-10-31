@@ -2,12 +2,19 @@
 
 Decode Rails 4 encrypted cookies in Go.
 
+## Overview
+
+Bugs are expected because the Ruby Unmarshaller isn't complete yet. If you
+really want to exchange data between Rails and Golang I'd recommend you to not
+use the `session` hash and manually create an encrypted cookie that both sides
+can understand.
+
 ## Example
 
 ```go
 rookie := rookie.New(os.Getenv("SECRET_KEY_BASE"))
 data, _ := rookie.Decode(cookie)
-params := data.(map[string]interface{})
+params := data.(map[string]string)
 params["user_id"]
 ```
 
