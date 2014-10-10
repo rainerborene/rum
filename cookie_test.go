@@ -1,4 +1,4 @@
-package rookie
+package rum
 
 import (
 	"encoding/hex"
@@ -21,7 +21,10 @@ func TestKeyGenerator(t *testing.T) {
 func TestDecode(t *testing.T) {
 	cookie := "WnpvU1NaQ2NSL3YvU2FGNWYxd0s4Q2xWSW1ZUm4vaTB2UENsRWQzWUFrYkZkemlGOFNxQXlxK3UyaWxBSUVEWUlkaFg2Si82dEdJb0dISWp6UXFHWDNJVlhwRW9ibEV1N2ZJbnNyVnhwVXBXc0hBVExaZVBCaVNzQVNUc3AwbG5IYmdPeE1XTDNQaytYMjJwOS9nSjZnU0h5SUMvRlVvNTZHdU1meU5lbjBUaGk4OFJmL2NmTDhOQWlJZVR1a3NWRzFPR3FmUzZvQk9HeS9RcXJDeHlVTVdxZHI2aHhUOUJZR2Q2bG1XdndqcmdhMXIway8vQVdCcEkvKzZ6Y3lyVTF0MVRYOGhDY0xFTVlzZkFBMUh4OGc9PS0tYzU3ZmpvUGdBYXVxN1JHbkVwYlkwUT09--6d6594c481b047a93bbb61f68df97e5e06c77641"
 
+	var data interface{}
+
 	rookie := New(SecretKeyBase)
-	data, _ := rookie.Decode(cookie)
+	rookie.Decode(cookie, data)
+
 	assert.NotEmpty(t, data)
 }

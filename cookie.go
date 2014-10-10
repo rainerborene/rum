@@ -1,4 +1,4 @@
-package rookie
+package rum
 
 import (
 	"code.google.com/p/go.crypto/pbkdf2"
@@ -30,27 +30,26 @@ func (r *rookie) key() []byte {
 		r.CookieSaltLength, sha1.New)
 }
 
-func (r *rookie) Decode(cookie string) (interface{}, error) {
+func (r *rookie) Decode(cookie string, v interface{}) error {
 	raw, err := base64.StdEncoding.DecodeString(cookie)
 	parts := strings.Split(string(raw), "--")
 	data, err := base64.StdEncoding.DecodeString(parts[0])
 	iv, err := base64.StdEncoding.DecodeString(parts[1])
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	block, err := aes.NewCipher(r.key()[:32])
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	mode := cipher.NewCBCDecrypter(block, iv)
 	mode.CryptBlocks(data, data)
 
-	rubyObj, err := Unmarshal(data)
-	if err != nil {
-		return nil, err
+	if err := Unmarshal(data, v); err != nil {
+		return err
 	}
 
-	return rubyObj, nil
+	return nil
 }

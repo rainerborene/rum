@@ -1,20 +1,29 @@
-package rookie
+package rum
 
 import (
 	"bufio"
 	"bytes"
 	"errors"
+	"io"
+	"reflect"
 )
 
-var encodingSymbols = []byte{0x06, 'E', 'T'}
+const (
+	MARSHAL_MAJOR = 4
+	MARSHAL_MINOR = 8
+)
 
-type decoder struct {
+type Decoder struct {
 	r *bufio.Reader
 }
 
-func (d *decoder) unmarshalRubyInteger() int {
+func NewDecoder(r io.Reader) *Decoder {
+	return &Decoder{bufio.NewReader(r)}
+}
+
+func (dec *Decoder) integer() int {
 	var result int
-	value, _ := d.r.ReadByte()
+	value, _ := dec.r.ReadByte()
 	c := int(value)
 
 	if c == 0 {
@@ -28,14 +37,14 @@ func (d *decoder) unmarshalRubyInteger() int {
 	if c > 0 {
 		result = 0
 		for i := 0; i < c; i++ {
-			n, _ := d.r.ReadByte()
+			n, _ := dec.r.ReadByte()
 			result |= int(uint(n) << (8 * uint(i)))
 		}
 	} else {
 		c = -c
 		result = -1
 		for i := 0; i < c; i++ {
-			n, _ := d.r.ReadByte()
+			n, _ := dec.r.ReadByte()
 			result &= ^(0xff << (8 * uint(i)))
 			result |= int(uint(n) << (8 * uint(i)))
 		}
@@ -44,82 +53,91 @@ func (d *decoder) unmarshalRubyInteger() int {
 	return result
 }
 
-func (d *decoder) unmarshalRubyString() string {
-	var value []byte
-	length := int(d.unmarshalRubyInteger())
+func (dec *Decoder) literal(v reflect.Value) {
+	length := dec.integer()
+	value := make([]byte, length)
 
 	for ; length > 0; length-- {
-		char, _ := d.r.ReadByte()
+		char, _ := dec.r.ReadByte()
 		value = append(value, char)
 	}
 
-	return string(value)
+	v.SetString(string(value))
 }
 
-func (d *decoder) unmarshalRubyHash() interface{} {
-	size := d.unmarshalRubyInteger()
-	hash := make(map[string]interface{}, int(size))
+func (dec *Decoder) hash() {
+	size := dec.integer()
+	hash := make(map[string]interface{}, size)
 
 	for i := 0; i < int(size); i++ {
-		key := d.unmarshalRubyType()
-		value := d.unmarshalRubyType()
+		key := dec.unmarshal()
+		value := dec.unmarshal()
 		hash[key.(string)] = value
 	}
 
 	return hash
 }
 
-func (d *decoder) unmarshalRubyArray() []interface{} {
-	size := d.unmarshalRubyInteger()
-	items := make([]interface{}, int(size))
+func (dec *Decoder) array(val reflect.Value) {
+	size := dec.unmarshalRubyInteger()
+	items := make([]interface{}, size)
 
-	for i := 0; i < int(size); i++ {
-		items[i] = d.unmarshalRubyType()
+	for i := 0; i < size; i++ {
+		items[i] = dec.unmarshal(val)
 	}
 
 	return items
 }
 
-func (d *decoder) unmarshalRubyType() interface{} {
-	rubyType, _ := d.r.ReadByte()
+func (dec *Decoder) unmarshal(val reflect.Value) {
+	rubyType, _ := dec.r.ReadByte()
 
 	switch rubyType {
 	case 'I', 'T', 'F', ';', 0x00, 0x06:
-		return d.unmarshalRubyType()
+		dec.unmarshal(val)
 	case '[':
-		return d.unmarshalRubyArray()
+		dec.array()
 	case '{':
-		return d.unmarshalRubyHash()
+		hash := reflect.ValueOf(dec.unmarshalRubyHash())
+		val.Set(hash)
 	case '"':
-		return d.unmarshalRubyString()
+		dec.literal()
 	case 'i':
-		return d.unmarshalRubyInteger()
+		dec.integer()
 	case ':':
-		encoding, _ := d.r.Peek(3)
-		if bytes.Equal(encoding, encodingSymbols) {
-			d.r.ReadByte()
-			d.r.ReadByte()
-			d.r.ReadByte()
-			return d.unmarshalRubyType()
+		encoding, _ := dec.r.Peek(3)
+		if bytes.Equal(encoding, []byte{0x06, 'E', 'T'}) {
+			dec.r.ReadByte()
+			dec.r.ReadByte()
+			dec.r.ReadByte()
+			dec.unmarshal(val)
 		}
-		return d.unmarshalRubyString()
+		dec.literal()
 	}
+}
+
+func (dec *Decoder) Decode(v interface{}) error {
+	major, err := dec.r.ReadByte()
+	minor, err := dec.r.ReadByte()
+
+	if err != nil {
+		return errors.New("unexpected end of stream")
+	}
+
+	if major != MARSHAL_MAJOR || minor > MARSHAL_MINOR {
+		return errors.New("incompatible marshal file format")
+	}
+
+	val := reflect.ValueOf(v)
+	if val.Kind() != reflect.Ptr {
+		return errors.New("non-pointer passed to Unmarshal")
+	}
+
+	dec.unmarshal(val.Elem())
 
 	return nil
 }
 
-func Unmarshal(buf []byte) (interface{}, error) {
-	decoder := &decoder{bufio.NewReader(bytes.NewReader(buf))}
-	major, err := decoder.r.ReadByte()
-	minor, err := decoder.r.ReadByte()
-
-	if err != nil {
-		return nil, errors.New("unexpected end of stream")
-	}
-
-	if major != 4 || minor > 8 {
-		return nil, errors.New("incompatible marshal file format")
-	}
-
-	return decoder.unmarshalRubyType(), nil
+func Unmarshal(buf []byte, v interface{}) error {
+	return NewDecoder(bytes.NewReader(buf)).Decode(v)
 }
